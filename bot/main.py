@@ -47,8 +47,21 @@ async def main():
     await db.init()
 
     # Initialize Bot and Dispatcher
+    from aiogram.client.session.aiohttp import AiohttpSession
+    from aiogram.client.telegram import TelegramAPIServer
+
+    session = None
+    if settings.TELEGRAM_API_SERVER or settings.PROXY_URL:
+        api_server = (
+            TelegramAPIServer.from_base(settings.TELEGRAM_API_SERVER)
+            if settings.TELEGRAM_API_SERVER
+            else TelegramAPIServer.from_base("https://api.telegram.org")
+        )
+        session = AiohttpSession(api=api_server, proxy=settings.PROXY_URL)
+
     bot = Bot(
         token=settings.BOT_TOKEN,
+        session=session,
         default=DefaultBotProperties(parse_mode=None)
     )
     dp = Dispatcher()

@@ -12,6 +12,8 @@ class Settings(BaseSettings):
 
     BOT_TOKEN: str = Field(..., description="Telegram bot API token")
     BOT_USERNAME: str | None = Field(default=None, description="Bot username without @")
+    TELEGRAM_API_SERVER: str | None = Field(default=None, description="Custom Telegram API server / Cloudflare Worker")
+    PROXY_URL: str | None = Field(default=None, description="SOCKS5 or HTTP proxy URL")
     DB_PATH: Path = Field(default=Path("data/bot.db"), description="Path to SQLite database")
     TEMP_DIR: Path = Field(default=Path("/tmp/stickbot"), description="Directory for media processing")
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
