@@ -1,3 +1,4 @@
+import html
 import io
 import logging
 import uuid
@@ -226,13 +227,14 @@ async def handle_media_upload(
             pack_link = format_pack_link(pack.name)
             await status_msg.delete()
             source_set = message.sticker.set_name if message.sticker else None
+            title_esc = html.escape(pack.title)
             await message.answer(
-                f"✅ **Стикер успешно добавлен!**\n\n"
-                f"📦 Пак: **{pack.title}** ({pack.stickers_count + 1}/{limit})\n"
+                f"✅ <b>Стикер успешно добавлен!</b>\n\n"
+                f"📦 Пак: <b>{title_esc}</b> ({pack.stickers_count + 1}/{limit})\n"
                 f"🎯 Эмодзи: {' '.join(emojis)}\n"
                 f"🔗 {pack_link}",
                 reply_markup=get_sticker_added_keyboard(pack, last_file_id, source_set_name=source_set),
-                parse_mode="Markdown"
+                parse_mode="HTML"
             )
 
         except TelegramBadRequest as e:
@@ -375,15 +377,16 @@ async def callback_preview_confirm_add(callback: CallbackQuery, bot: Bot, repo: 
         )
 
         pack_link = format_pack_link(pack.name)
+        title_esc = html.escape(pack.title)
         await callback.message.edit_caption(
             caption=(
-                f"✅ **Стикер успешно добавлен!**\n\n"
-                f"📦 Пак: **{pack.title}**\n"
+                f"✅ <b>Стикер успешно добавлен!</b>\n\n"
+                f"📦 Пак: <b>{title_esc}</b>\n"
                 f"🎯 Эмодзи: {item['emoji']}\n"
                 f"🔗 {pack_link}"
             ),
             reply_markup=get_sticker_added_keyboard(pack, last_file_id),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
     except Exception as e:
         logger.exception("Error in preview_confirm_add: %s", e)

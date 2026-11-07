@@ -108,14 +108,14 @@ def get_pack_details_keyboard(pack: StickerPack, is_active: bool) -> InlineKeybo
 
 def get_sticker_added_keyboard(
     pack: StickerPack,
-    sticker_file_id: str,
+    sticker_file_id: str | None = None,
     source_set_name: str | None = None
 ) -> InlineKeyboardMarkup:
     pack_url = format_pack_link(pack.name)
     buttons = [
         [
             InlineKeyboardButton(text="🔗 Открыть пак", url=pack_url),
-            InlineKeyboardButton(text="🗑 Удалить этот стикер", callback_data=f"del_sticker_fid:{pack.id}:{sticker_file_id}")
+            InlineKeyboardButton(text="🗑 Удалить этот стикер", callback_data=f"del_last_sticker:{pack.id}")
         ]
     ]
 
