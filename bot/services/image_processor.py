@@ -5,6 +5,9 @@ from PIL import Image, ImageOps, ImageFilter, ImageDraw, ImageFont
 
 logger = logging.getLogger(__name__)
 
+# Prevent decompression bomb DoS attacks (max 25 megapixels)
+Image.MAX_IMAGE_PIXELS = 25_000_000
+
 
 def calculate_sticker_dimensions(width: int, height: int, max_dim: int = 512) -> Tuple[int, int]:
     """
@@ -167,15 +170,15 @@ def process_image(
         image = ImageOps.exif_transpose(raw_image)
         image = image.convert("RGBA")
 
-        # 1. Add outline if requested
-        if add_outline:
-            image = add_white_outline(image)
-
-        # 2. Resize to Telegram standards
+        # 1. Resize to Telegram standards FIRST (prevents CPU/RAM exhaustion on large images)
         if is_custom_emoji:
             image = resize_to_custom_emoji(image, size=100)
         else:
             image = resize_to_sticker(image, max_dim=512)
+
+        # 2. Add outline on the pre-scaled canvas (runs in ~2ms instead of seconds)
+        if add_outline:
+            image = add_white_outline(image)
 
         # 3. Add text captions if requested
         if top_text or bottom_text:

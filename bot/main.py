@@ -68,9 +68,14 @@ async def main():
     dp = Dispatcher()
 
     # Register Middlewares
+    from bot.middlewares.throttling_middleware import ThrottlingMiddleware
+
     db_middleware = DatabaseMiddleware(db)
     dp.message.outer_middleware(db_middleware)
     dp.callback_query.outer_middleware(db_middleware)
+
+    # Throttling to protect server CPU from media flood
+    dp.message.middleware(ThrottlingMiddleware(rate_limit_seconds=1.2))
 
     # Register Routers
     for r in routers:

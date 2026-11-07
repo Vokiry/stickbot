@@ -208,6 +208,9 @@ async def process_first_sticker(
                 return
 
             file_info = await bot.get_file(file_id)
+            if file_info.file_size and file_info.file_size > 25 * 1024 * 1024:
+                await status_msg.edit_text("⚠️ Файл слишком большой (максимум 25 МБ).", reply_markup=get_cancel_keyboard())
+                return
             file_bytes_io = io.BytesIO()
             await bot.download_file(file_info.file_path, file_bytes_io)
             raw_bytes = file_bytes_io.getvalue()
@@ -241,6 +244,9 @@ async def process_first_sticker(
                 return
 
             file_info = await bot.get_file(file_id)
+            if file_info.file_size and file_info.file_size > 25 * 1024 * 1024:
+                await status_msg.edit_text("⚠️ Файл слишком большой (максимум 25 МБ).", reply_markup=get_cancel_keyboard())
+                return
             file_bytes_io = io.BytesIO()
             await bot.download_file(file_info.file_path, file_bytes_io)
             raw_bytes = file_bytes_io.getvalue()

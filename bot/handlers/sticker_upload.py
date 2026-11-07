@@ -16,13 +16,25 @@ from bot.services.video_processor import process_video
 from bot.utils.helpers import extract_emojis, format_pack_link
 from bot.utils.keyboards import get_sticker_added_keyboard, get_interactive_preview_keyboard
 
+import time
+
 logger = logging.getLogger(__name__)
 
 router = Router(name="sticker_upload")
 
-# In-memory storage for interactive previews (key: temp_id)
-# temp_id -> dict(raw_bytes, pack_id, format, is_custom_emoji, outline, emoji, top_text, bottom_text)
+# In-memory storage for interactive previews with automatic TTL cleanup
 PREVIEW_CACHE: dict[str, dict] = {}
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
+
+
+def cleanup_preview_cache():
+    now = time.time()
+    expired = [k for k, v in PREVIEW_CACHE.items() if now - v.get("created_at", now) > 300]
+    for k in expired:
+        PREVIEW_CACHE.pop(k, None)
+    while len(PREVIEW_CACHE) > 50:
+        oldest = next(iter(PREVIEW_CACHE))
+        PREVIEW_CACHE.pop(oldest, None)
 
 
 async def get_or_resolve_active_pack(
@@ -167,8 +179,11 @@ async def handle_media_upload(
         status_msg = await message.answer("⏳ Обрабатываю и добавляю в стикерпак...")
 
         try:
-            # Download file
+            # Download file with size validation
             file_info = await bot.get_file(file_id)
+            if file_info.file_size and file_info.file_size > MAX_FILE_SIZE:
+                await status_msg.edit_text("⚠️ Файл слишком большой (максимум 25 МБ). Пожалуйста, отправьте файл меньшего размера.")
+                return
             buf = io.BytesIO()
             await bot.download_file(file_info.file_path, buf)
             raw_bytes = buf.getvalue()
@@ -231,10 +246,15 @@ async def handle_media_upload(
     else:
         # Interactive Mode: generate preview and show options
         file_info = await bot.get_file(file_id)
+        if file_info.file_size and file_info.file_size > MAX_FILE_SIZE:
+            await message.answer("⚠️ Файл слишком большой (максимум 25 МБ). Пожалуйста, отправьте файл меньшего размера.")
+            return
+
         buf = io.BytesIO()
         await bot.download_file(file_info.file_path, buf)
         raw_bytes = buf.getvalue()
 
+        cleanup_preview_cache()
         temp_id = str(uuid.uuid4())[:8]
         PREVIEW_CACHE[temp_id] = {
             "raw_bytes": raw_bytes,
@@ -244,7 +264,8 @@ async def handle_media_upload(
             "outline": user.settings_auto_outline,
             "emoji": emojis[0],
             "top_text": "",
-            "bottom_text": ""
+            "bottom_text": "",
+            "created_at": time.time()
         }
 
         # Render preview image
@@ -319,8 +340,8 @@ async def callback_preview_confirm_add(callback: CallbackQuery, bot: Bot, repo: 
         return
 
     pack = await repo.get_pack(item["pack_id"])
-    if not pack:
-        await callback.answer("Пак не найден.", show_alert=True)
+    if not pack or pack.user_id != callback.from_user.id:
+        await callback.answer("⚠️ Пак не найден или у вас нет прав.", show_alert=True)
         return
 
     await callback.message.edit_caption(caption="⏳ Добавляю стикер в пак...")
@@ -383,6 +404,11 @@ async def callback_delete_sticker_by_fid(callback: CallbackQuery, bot: Bot, repo
     parts = callback.data.split(":")
     pack_id = int(parts[1])
     file_id = parts[2]
+
+    pack = await repo.get_pack(pack_id)
+    if not pack or pack.user_id != callback.from_user.id:
+        await callback.answer("⛔️ У вас нет прав для изменения этого набора.", show_alert=True)
+        return
 
     sticker_service = StickerService(bot)
     success = await sticker_service.delete_sticker(file_id)

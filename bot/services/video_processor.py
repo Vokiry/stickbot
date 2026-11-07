@@ -47,7 +47,16 @@ async def convert_video_to_webm(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE
     )
-    stdout, stderr = await proc.communicate()
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=25.0)
+    except asyncio.TimeoutError:
+        try:
+            proc.kill()
+            await proc.wait()
+        except OSError:
+            pass
+        logger.error("FFmpeg process timed out (exceeded 25s limit) and was terminated")
+        return False
 
     if proc.returncode != 0:
         logger.error("FFmpeg error (code %d): %s", proc.returncode, stderr.decode("utf-8", errors="ignore"))

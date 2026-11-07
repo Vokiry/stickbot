@@ -95,8 +95,8 @@ async def callback_back_to_packs(callback: CallbackQuery, repo: Repository, user
 async def callback_view_pack(callback: CallbackQuery, repo: Repository, user: User):
     pack_id = int(callback.data.split(":")[1])
     pack = await repo.get_pack(pack_id)
-    if not pack:
-        await callback.answer("⚠️ Пак не найден или был удален.", show_alert=True)
+    if not pack or pack.user_id != callback.from_user.id:
+        await callback.answer("⚠️ Пак не найден или у вас нет прав.", show_alert=True)
         return
 
     is_active = (user.active_pack_id == pack.id)
@@ -126,8 +126,8 @@ async def callback_view_pack(callback: CallbackQuery, repo: Repository, user: Us
 async def callback_activate_pack(callback: CallbackQuery, repo: Repository, user: User):
     pack_id = int(callback.data.split(":")[1])
     pack = await repo.get_pack(pack_id)
-    if not pack:
-        await callback.answer("⚠️ Пак не найден.", show_alert=True)
+    if not pack or pack.user_id != callback.from_user.id:
+        await callback.answer("⚠️ Пак не найден или у вас нет прав.", show_alert=True)
         return
 
     await repo.set_active_pack(callback.from_user.id, pack.id)
@@ -156,8 +156,8 @@ async def callback_activate_pack(callback: CallbackQuery, repo: Repository, user
 async def callback_del_last_sticker(callback: CallbackQuery, repo: Repository, bot: Bot):
     pack_id = int(callback.data.split(":")[1])
     pack = await repo.get_pack(pack_id)
-    if not pack:
-        await callback.answer("⚠️ Пак не найден.", show_alert=True)
+    if not pack or pack.user_id != callback.from_user.id:
+        await callback.answer("⚠️ Пак не найден или у вас нет прав.", show_alert=True)
         return
 
     sticker = await repo.get_last_sticker(pack_id)
@@ -197,8 +197,8 @@ async def callback_del_last_sticker(callback: CallbackQuery, repo: Repository, b
 async def callback_confirm_del_pack(callback: CallbackQuery, repo: Repository):
     pack_id = int(callback.data.split(":")[1])
     pack = await repo.get_pack(pack_id)
-    if not pack:
-        await callback.answer("⚠️ Пак не найден.", show_alert=True)
+    if not pack or pack.user_id != callback.from_user.id:
+        await callback.answer("⚠️ Пак не найден или у вас нет прав.", show_alert=True)
         return
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -219,8 +219,8 @@ async def callback_confirm_del_pack(callback: CallbackQuery, repo: Repository):
 async def callback_do_del_pack(callback: CallbackQuery, repo: Repository, bot: Bot):
     pack_id = int(callback.data.split(":")[1])
     pack = await repo.get_pack(pack_id)
-    if not pack:
-        await callback.answer("⚠️ Пак уже удален.", show_alert=True)
+    if not pack or pack.user_id != callback.from_user.id:
+        await callback.answer("⚠️ Пак не найден или у вас нет прав.", show_alert=True)
         return
 
     sticker_service = StickerService(bot)
@@ -241,8 +241,12 @@ async def callback_do_del_pack(callback: CallbackQuery, repo: Repository, bot: B
 
 
 @router.callback_query(F.data.startswith("edit_title:"))
-async def callback_edit_title(callback: CallbackQuery, state: FSMContext):
+async def callback_edit_title(callback: CallbackQuery, state: FSMContext, repo: Repository):
     pack_id = int(callback.data.split(":")[1])
+    pack = await repo.get_pack(pack_id)
+    if not pack or pack.user_id != callback.from_user.id:
+        await callback.answer("⚠️ Пак не найден или у вас нет прав.", show_alert=True)
+        return
     await state.update_data(edit_pack_id=pack_id)
     await state.set_state(EditTitleSG.enter_new_title)
 
@@ -263,6 +267,11 @@ async def process_new_title(message: Message, state: FSMContext, repo: Repositor
 
     data = await state.get_data()
     pack_id = data["edit_pack_id"]
+    pack = await repo.get_pack(pack_id)
+    if not pack or pack.user_id != message.from_user.id:
+        await state.clear()
+        await message.answer("⚠️ Пак не найден или у вас нет прав.")
+        return
     await repo.update_pack_title(pack_id, new_title)
     await state.clear()
 
@@ -275,8 +284,12 @@ async def process_new_title(message: Message, state: FSMContext, repo: Repositor
 
 
 @router.callback_query(F.data.startswith("set_thumb:"))
-async def callback_set_thumb(callback: CallbackQuery, state: FSMContext):
+async def callback_set_thumb(callback: CallbackQuery, state: FSMContext, repo: Repository):
     pack_id = int(callback.data.split(":")[1])
+    pack = await repo.get_pack(pack_id)
+    if not pack or pack.user_id != callback.from_user.id:
+        await callback.answer("⚠️ Пак не найден или у вас нет прав.", show_alert=True)
+        return
     await state.update_data(thumb_pack_id=pack_id)
     await state.set_state(SetThumbSG.send_thumb)
 
@@ -293,9 +306,9 @@ async def process_set_thumb(message: Message, state: FSMContext, repo: Repositor
     data = await state.get_data()
     pack_id = data["thumb_pack_id"]
     pack = await repo.get_pack(pack_id)
-    if not pack:
+    if not pack or pack.user_id != message.from_user.id:
         await state.clear()
-        await message.answer("⚠️ Пак не найден.")
+        await message.answer("⚠️ Пак не найден или у вас нет прав.")
         return
 
     status_msg = await message.answer("⏳ Обновляю иконку стикерпака...")
@@ -311,6 +324,9 @@ async def process_set_thumb(message: Message, state: FSMContext, repo: Repositor
                 return
 
             file_info = await bot.get_file(file_id)
+            if file_info.file_size and file_info.file_size > 25 * 1024 * 1024:
+                await status_msg.edit_text("⚠️ Файл слишком большой (максимум 25 МБ).")
+                return
             buf = io.BytesIO()
             await bot.download_file(file_info.file_path, buf)
             processed_bytes = process_image(buf.getvalue(), add_outline=False)
@@ -330,6 +346,9 @@ async def process_set_thumb(message: Message, state: FSMContext, repo: Repositor
                 return
 
             file_info = await bot.get_file(file_id)
+            if file_info.file_size and file_info.file_size > 25 * 1024 * 1024:
+                await status_msg.edit_text("⚠️ Файл слишком большой (максимум 25 МБ).")
+                return
             buf = io.BytesIO()
             await bot.download_file(file_info.file_path, buf)
             processed_bytes = await process_video(buf.getvalue(), temp_dir=settings.TEMP_DIR)
