@@ -52,38 +52,21 @@ async def get_or_resolve_active_pack(
         if active_pack:
             return active_pack
 
-    # If no active pack set, try finding a pack of the required format
-    user_packs = await repo.get_user_packs(user.telegram_id, format_=media_format)
-    if user_packs:
-        # Auto-activate the latest pack of this format
-        pack = user_packs[0]
+    # If no active pack set, try finding any pack
+    all_packs = await repo.get_user_packs(user.telegram_id)
+    if all_packs:
+        pack = all_packs[0]
         await repo.set_active_pack(user.telegram_id, pack.id)
         return pack
 
-    # Check if user has ANY packs
-    all_packs = await repo.get_user_packs(user.telegram_id)
-    if not all_packs:
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🎨 Создать стикерпак", callback_data="create_new_pack")]
-        ])
-        await message.answer(
-            "⚠️ **У вас пока нет активного стикерпака!**\n\n"
-            "Чтобы сохранять стикеры, сначала создайте свой набор.",
-            reply_markup=keyboard,
-            parse_mode="Markdown"
-        )
-        return None
-
-    # User has packs, but none match the media format
-    target_type = "видеопаков" if media_format == "video" else "статических паков"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎨 Создать нужный пак", callback_data="create_new_pack")],
-        [InlineKeyboardButton(text="📂 Выбрать из существующих", callback_data="back_to_packs")]
+        [InlineKeyboardButton(text="🎨 Создать стикерпак", callback_data="create_new_pack")]
     ])
     await message.answer(
-        f"⚠️ У вас нет активного набора для этого формата (нет подходящих {target_type}).\n\n"
-        f"Создайте новый пак или выберите другой в меню:",
-        reply_markup=keyboard
+        "⚠️ <b>У вас пока нет активного стикерпака!</b>\n\n"
+        "Чтобы сохранять стикеры, сначала создайте свой набор.",
+        reply_markup=keyboard,
+        parse_mode="HTML"
     )
     return None
 
@@ -135,20 +118,17 @@ async def handle_media_upload(
     if not pack:
         return
 
-    # Check format match
-    if pack.format != media_format:
-        expected = "видео/GIF" if pack.format == "video" else "картинок"
-        received = "видео" if media_format == "video" else "картинку"
+    # If pack is purely vector animated (.TGS), it cannot accept raster images/videos
+    if pack.format == "animated":
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="📂 Сменить активный пак", callback_data="back_to_packs")],
             [InlineKeyboardButton(text="🎨 Создать новый пак", callback_data="create_new_pack")]
         ])
         await message.answer(
-            f"⚠️ **Несоответствие форматов:**\n"
-            f"Активный пак «**{pack.title}**» предназначен для **{expected}**, а вы прислали **{received}**.\n\n"
-            f"Переключите активный пак или создайте новый:",
+            f"⚠️ Пак «<b>{html.escape(pack.title)}</b>» является векторным анимированным (.TGS).\n"
+            f"В него нельзя добавлять обычные фото или видео. Выберите обычный пак:",
             reply_markup=keyboard,
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
         return
 
@@ -201,13 +181,13 @@ async def handle_media_upload(
                     is_custom_emoji=is_custom_emoji
                 )
 
-            # Add to set in Telegram
+            # Add to set in Telegram with the actual media_format
             sticker_service = StickerService(bot)
             await sticker_service.add_sticker(
                 user_id=message.from_user.id,
                 name=pack.name,
                 sticker_data=processed_bytes,
-                format_=pack.format,
+                format_=media_format,
                 emojis=emojis
             )
 

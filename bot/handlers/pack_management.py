@@ -46,7 +46,9 @@ def render_pack_details_html(pack: StickerPack, is_active: bool) -> str:
 
     status_str = "✅ Активен (новые стикеры идут сюда)" if is_active else "⏸ Не активен"
     type_str = "⭐️ Custom Emoji" if pack.sticker_type == "custom_emoji" else (
-        "🎬 Видео" if pack.format == "video" else "🖼 Статика"
+        "🔀 Смешанный (видео + фото)" if pack.format == "mixed" else (
+            "🎬 Видео" if pack.format == "video" else "🖼 Статика"
+        )
     )
 
     return (

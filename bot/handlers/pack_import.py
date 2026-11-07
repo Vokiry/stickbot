@@ -98,7 +98,9 @@ async def handle_pack_lookup(
     if is_our_bot_pack:
         existing = await repo.get_pack_by_name(pack_name)
         if not existing:
-            format_ = "video" if set_info.is_video else ("animated" if set_info.is_animated else "static")
+            has_video = any(s.is_video for s in set_info.stickers)
+            has_static = any(not s.is_video and not s.is_animated for s in set_info.stickers)
+            format_ = "mixed" if (has_video and has_static) else ("video" if has_video else ("animated" if set_info.is_animated else "static"))
             pack = await repo.create_pack(
                 user_id=message.from_user.id,
                 name=pack_name,
@@ -126,7 +128,9 @@ async def handle_pack_lookup(
 
     # Case 2: External pack (created by @Stickers or other bot)
     await state.clear()
-    format_name = "🎬 Видео" if set_info.is_video else ("✨ Анимация" if set_info.is_animated else "🖼 Статика")
+    has_video = any(s.is_video for s in set_info.stickers)
+    has_static = any(not s.is_video and not s.is_animated for s in set_info.stickers)
+    format_name = "🔀 Смешанный (видео + статика)" if (has_video and has_static) else ("🎬 Видео" if has_video else ("✨ Анимация" if set_info.is_animated else "🖼 Статика"))
 
     text = (
         f"📦 **Найден стикерпак:** {set_info.title}\n\n"
@@ -169,7 +173,9 @@ async def callback_do_clone_pack(callback: CallbackQuery, bot: Bot, repo: Reposi
     slug_prefix = source_pack_name.split("_by_")[0][:12]
     new_pack_name = generate_random_pack_name(bot_username, prefix=slug_prefix)
     new_title = f"{set_info.title}"
-    format_ = "video" if set_info.is_video else ("animated" if set_info.is_animated else "static")
+    has_video = any(s.is_video for s in set_info.stickers)
+    has_static = any(not s.is_video and not s.is_animated for s in set_info.stickers)
+    format_ = "mixed" if (has_video and has_static) else ("video" if has_video else ("animated" if set_info.is_animated else "static"))
     sticker_type = set_info.sticker_type
 
     total = len(set_info.stickers)
@@ -178,6 +184,7 @@ async def callback_do_clone_pack(callback: CallbackQuery, bot: Bot, repo: Reposi
     # Step 1: Create new sticker set with the first sticker
     first_stk = set_info.stickers[0]
     first_emoji = [first_stk.emoji] if first_stk.emoji else ["✨"]
+    first_fmt = "video" if first_stk.is_video else ("animated" if first_stk.is_animated else "static")
 
     try:
         # Try direct file_id first
@@ -186,7 +193,7 @@ async def callback_do_clone_pack(callback: CallbackQuery, bot: Bot, repo: Reposi
             name=new_pack_name,
             title=new_title,
             sticker_data=first_stk.file_id,
-            format_=format_,
+            format_=first_fmt,
             sticker_type=sticker_type,
             emojis=first_emoji
         )
@@ -201,7 +208,7 @@ async def callback_do_clone_pack(callback: CallbackQuery, bot: Bot, repo: Reposi
             name=new_pack_name,
             title=new_title,
             sticker_data=buf.getvalue(),
-            format_=format_,
+            format_=first_fmt,
             sticker_type=sticker_type,
             emojis=first_emoji
         )
@@ -225,13 +232,14 @@ async def callback_do_clone_pack(callback: CallbackQuery, bot: Bot, repo: Reposi
     cloned_count = 1
     for idx, stk in enumerate(set_info.stickers[1:], start=2):
         emojis = [stk.emoji] if stk.emoji else ["✨"]
+        stk_fmt = "video" if stk.is_video else ("animated" if stk.is_animated else "static")
         try:
             # Try direct file_id
             await sticker_service.add_sticker(
                 user_id=callback.from_user.id,
                 name=new_pack_name,
                 sticker_data=stk.file_id,
-                format_=format_,
+                format_=stk_fmt,
                 emojis=emojis
             )
         except TelegramBadRequest:
@@ -244,7 +252,7 @@ async def callback_do_clone_pack(callback: CallbackQuery, bot: Bot, repo: Reposi
                     user_id=callback.from_user.id,
                     name=new_pack_name,
                     sticker_data=buf.getvalue(),
-                    format_=format_,
+                    format_=stk_fmt,
                     emojis=emojis
                 )
             except Exception as e:

@@ -148,7 +148,9 @@ async def callback_admin_view_pack(callback: CallbackQuery, repo: Repository):
     pack_name_esc = html.escape(pack.name)
     pack_url = format_pack_link(pack.name)
     type_str = "⭐️ Custom Emoji" if pack.sticker_type == "custom_emoji" else (
-        "🎬 Видео" if pack.format == "video" else "🖼 Статика"
+        "🔀 Смешанный (видео + фото)" if pack.format == "mixed" else (
+            "🎬 Видео" if pack.format == "video" else "🖼 Статика"
+        )
     )
 
     text = (
