@@ -1,0 +1,15 @@
+services:
+  stickbot:
+    build: .
+    container_name: stickbot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - /tmp/stickbot:/tmp/stickbot
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
