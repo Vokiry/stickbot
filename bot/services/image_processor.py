@@ -170,6 +170,11 @@ def process_image(
         image = ImageOps.exif_transpose(raw_image)
         image = image.convert("RGBA")
 
+        # Autocrop transparent borders so the actual subject takes maximum possible space
+        bbox = image.getbbox()
+        if bbox:
+            image = image.crop(bbox)
+
         # 1. Resize to Telegram standards FIRST (prevents CPU/RAM exhaustion on large images)
         if is_custom_emoji:
             image = resize_to_custom_emoji(image, size=100)

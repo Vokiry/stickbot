@@ -73,3 +73,18 @@ def test_process_image_full_pipeline():
         assert max(out_im.width, out_im.height) == 512
         assert out_im.width == 512
         assert out_im.height == round(600 * (512 / 800))
+
+
+def test_process_image_autocrop_transparent_margins():
+    # 400x400 canvas, but content is only a 100x100 square in the center
+    im = Image.new("RGBA", (400, 400), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(im)
+    draw.rectangle((150, 150, 250, 250), fill=(0, 200, 100, 255))
+    buf = io.BytesIO()
+    im.save(buf, format="PNG")
+
+    res_bytes = process_image(buf.getvalue(), add_outline=False)
+    with Image.open(io.BytesIO(res_bytes)) as out_im:
+        # Since content was 100x100 square (1:1), after autocrop and resize it should be 512x512!
+        assert out_im.width == 512
+        assert out_im.height == 512
