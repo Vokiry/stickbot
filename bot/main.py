@@ -24,6 +24,7 @@ async def set_bot_commands(bot: Bot):
     commands = [
         BotCommand(command="start", description="🚀 Запустить бота"),
         BotCommand(command="newpack", description="🎨 Создать новый стикерпак"),
+        BotCommand(command="import", description="📥 Импортировать/склонировать пак"),
         BotCommand(command="packs", description="📂 Мои стикерпаки"),
         BotCommand(command="settings", description="⚙️ Настройки"),
         BotCommand(command="help", description="ℹ️ Инструкция и помощь"),

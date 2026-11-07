@@ -84,3 +84,26 @@ def extract_emojis(text: Optional[str], default: str = "✨") -> list[str]:
 
 def format_pack_link(pack_name: str) -> str:
     return f"https://t.me/addstickers/{pack_name}"
+
+
+def extract_pack_name_from_text(text: Optional[str]) -> Optional[str]:
+    """
+    Extracts sticker pack short name from links or raw text.
+    Handles:
+    - https://t.me/addstickers/<name>
+    - t.me/addstickers/<name>
+    - tg://addstickers?set=<name>
+    - raw <name>
+    """
+    if not text:
+        return None
+    text = text.strip()
+    match = re.search(r"(?:https?://)?t\.me/addstickers/([a-zA-Z0-9_]+)", text)
+    if match:
+        return match.group(1)
+    match = re.search(r"tg://addstickers\?set=([a-zA-Z0-9_]+)", text)
+    if match:
+        return match.group(1)
+    if re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_]{1,63}", text):
+        return text
+    return None

@@ -49,3 +49,14 @@ def test_extract_emojis():
 
 def test_format_pack_link():
     assert format_pack_link("animals_by_vokistickbot") == "https://t.me/addstickers/animals_by_vokistickbot"
+
+
+def test_extract_pack_name_from_text():
+    from bot.utils.helpers import extract_pack_name_from_text
+
+    assert extract_pack_name_from_text("https://t.me/addstickers/animals") == "animals"
+    assert extract_pack_name_from_text("t.me/addstickers/cats_and_dogs") == "cats_and_dogs"
+    assert extract_pack_name_from_text("tg://addstickers?set=hot_memes") == "hot_memes"
+    assert extract_pack_name_from_text("just_a_slug_123") == "just_a_slug_123"
+    assert extract_pack_name_from_text("invalid link http://example.com/test") is None
+    assert extract_pack_name_from_text(None) is None

@@ -11,8 +11,9 @@ from bot.utils.helpers import format_pack_link
 def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🎨 Создать пак"), KeyboardButton(text="📂 Мои паки")],
-            [KeyboardButton(text="⚙️ Настройки"), KeyboardButton(text="ℹ️ Помощь")]
+            [KeyboardButton(text="🎨 Создать пак"), KeyboardButton(text="📥 Импорт пака")],
+            [KeyboardButton(text="📂 Мои паки"), KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text="ℹ️ Помощь")]
         ],
         resize_keyboard=True
     )
@@ -103,16 +104,39 @@ def get_pack_details_keyboard(pack: StickerPack, is_active: bool) -> InlineKeybo
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def get_sticker_added_keyboard(pack: StickerPack, sticker_file_id: str) -> InlineKeyboardMarkup:
+def get_sticker_added_keyboard(
+    pack: StickerPack,
+    sticker_file_id: str,
+    source_set_name: str | None = None
+) -> InlineKeyboardMarkup:
     pack_url = format_pack_link(pack.name)
+    buttons = [
+        [
+            InlineKeyboardButton(text="🔗 Открыть пак", url=pack_url),
+            InlineKeyboardButton(text="🗑 Удалить этот стикер", callback_data=f"del_sticker_fid:{pack.id}:{sticker_file_id}")
+        ]
+    ]
+
+    if source_set_name and not source_set_name.endswith(f"_by_{pack.name.split('_by_')[-1]}"):
+        buttons.append([
+            InlineKeyboardButton(text="📥 Клонировать весь этот пак", callback_data=f"clone_source:{source_set_name}")
+        ])
+
+    buttons.append([
+        InlineKeyboardButton(text="📂 Все мои паки", callback_data="back_to_packs")
+    ])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_confirm_import_keyboard(pack_name: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🔗 Открыть пак", url=pack_url),
-                InlineKeyboardButton(text="🗑 Удалить этот стикер", callback_data=f"del_sticker_fid:{pack.id}:{sticker_file_id}")
+                InlineKeyboardButton(text="🚀 Клонировать для редактирования", callback_data=f"do_clone_pack:{pack_name}")
             ],
             [
-                InlineKeyboardButton(text="📂 Все мои паки", callback_data="back_to_packs")
+                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_action")
             ]
         ]
     )

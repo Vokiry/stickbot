@@ -211,12 +211,13 @@ async def handle_media_upload(
 
             pack_link = format_pack_link(pack.name)
             await status_msg.delete()
+            source_set = message.sticker.set_name if message.sticker else None
             await message.answer(
                 f"✅ **Стикер успешно добавлен!**\n\n"
                 f"📦 Пак: **{pack.title}** ({pack.stickers_count + 1}/{limit})\n"
                 f"🎯 Эмодзи: {' '.join(emojis)}\n"
                 f"🔗 {pack_link}",
-                reply_markup=get_sticker_added_keyboard(pack, last_file_id),
+                reply_markup=get_sticker_added_keyboard(pack, last_file_id, source_set_name=source_set),
                 parse_mode="Markdown"
             )
 
