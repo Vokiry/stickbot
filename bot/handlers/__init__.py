@@ -4,9 +4,11 @@ from bot.handlers.pack_management import router as pack_management_router
 from bot.handlers.pack_import import router as pack_import_router
 from bot.handlers.sticker_upload import router as sticker_upload_router
 from bot.handlers.settings import router as settings_router
+from bot.handlers.admin import router as admin_router
 
 routers = [
     common_router,
+    admin_router,
     pack_creation_router,
     pack_management_router,
     pack_import_router,

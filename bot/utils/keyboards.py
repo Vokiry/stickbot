@@ -8,15 +8,17 @@ from bot.database.models import StickerPack, User
 from bot.utils.helpers import format_pack_link
 
 
-def get_main_reply_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="🎨 Создать пак"), KeyboardButton(text="📥 Импорт пака")],
-            [KeyboardButton(text="📂 Мои паки"), KeyboardButton(text="⚙️ Настройки")],
-            [KeyboardButton(text="ℹ️ Помощь")]
-        ],
-        resize_keyboard=True
-    )
+def get_main_reply_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
+    rows = [
+        [KeyboardButton(text="🎨 Создать пак"), KeyboardButton(text="📥 Импорт пака")],
+        [KeyboardButton(text="📂 Мои паки"), KeyboardButton(text="⚙️ Настройки")],
+    ]
+    if is_admin:
+        rows.append([KeyboardButton(text="ℹ️ Помощь"), KeyboardButton(text="👑 Админ-панель")])
+    else:
+        rows.append([KeyboardButton(text="ℹ️ Помощь")])
+
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
 def get_pack_type_keyboard() -> InlineKeyboardMarkup:

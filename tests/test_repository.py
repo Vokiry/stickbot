@@ -69,3 +69,39 @@ async def test_repository_user_and_packs():
         assert await repo.get_pack(pack.id) is None
 
         await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_admin_repository_methods():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db_path = Path(tmp_dir) / "test_admin.db"
+        db = Database(db_path)
+        await db.init()
+
+        conn = await db.get_connection()
+        repo = Repository(conn)
+
+        # Create two users
+        u1 = await repo.get_or_create_user(1001, "user1", "First")
+        u2 = await repo.get_or_create_user(1002, "user2", "Second")
+
+        # Create packs
+        p1 = await repo.create_pack(1001, "p1_by_test", "Pack One")
+        p2 = await repo.create_pack(1002, "p2_by_test", "Pack Two")
+
+        # Check stats
+        stats = await repo.get_stats()
+        assert stats["users_count"] == 2
+        assert stats["packs_count"] == 2
+
+        # Check get_all_packs
+        all_packs = await repo.get_all_packs(limit=10)
+        assert len(all_packs) == 2
+        assert any(item["pack"].id == p1.id for item in all_packs)
+        assert any(item["pack"].id == p2.id for item in all_packs)
+
+        # Check get_all_users
+        all_users = await repo.get_all_users(limit=10)
+        assert len(all_users) == 2
+
+        await conn.close()

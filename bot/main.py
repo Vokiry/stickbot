@@ -27,6 +27,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="import", description="📥 Импортировать/склонировать пак"),
         BotCommand(command="packs", description="📂 Мои стикерпаки"),
         BotCommand(command="settings", description="⚙️ Настройки"),
+        BotCommand(command="admin", description="👑 Админ-панель"),
         BotCommand(command="help", description="ℹ️ Инструкция и помощь"),
         BotCommand(command="cancel", description="❌ Отменить текущее действие"),
     ]

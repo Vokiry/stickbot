@@ -4,6 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 from bot.database.models import User
 from bot.database.repository import Repository
+from bot.config import settings
 from bot.utils.keyboards import get_main_reply_keyboard
 
 router = Router(name="common")
@@ -45,9 +46,10 @@ HELP_TEXT = """
 @router.message(CommandStart())
 async def cmd_start(message: Message, user: User, state: FSMContext):
     await state.clear()
+    is_adm = (message.from_user.id in settings.admin_ids)
     await message.answer(
         WELCOME_TEXT.format(name=message.from_user.first_name),
-        reply_markup=get_main_reply_keyboard(),
+        reply_markup=get_main_reply_keyboard(is_admin=is_adm),
         parse_mode="Markdown"
     )
 
@@ -55,9 +57,10 @@ async def cmd_start(message: Message, user: User, state: FSMContext):
 @router.message(Command("help"))
 @router.message(F.text == "ℹ️ Помощь")
 async def cmd_help(message: Message):
+    is_adm = (message.from_user.id in settings.admin_ids)
     await message.answer(
         HELP_TEXT,
-        reply_markup=get_main_reply_keyboard(),
+        reply_markup=get_main_reply_keyboard(is_admin=is_adm),
         parse_mode="Markdown"
     )
 
@@ -70,7 +73,8 @@ async def cmd_cancel(message: Message, state: FSMContext):
         return
 
     await state.clear()
-    await message.answer("❌ Действие отменено.", reply_markup=get_main_reply_keyboard())
+    is_adm = (message.from_user.id in settings.admin_ids)
+    await message.answer("❌ Действие отменено.", reply_markup=get_main_reply_keyboard(is_admin=is_adm))
 
 
 @router.callback_query(F.data == "cancel_action")

@@ -309,3 +309,78 @@ class Repository:
         )
         await self.decrement_stickers_count(pack_id)
         await self.conn.commit()
+
+    # --- Admin operations ---
+
+    async def get_stats(self) -> dict:
+        async with self.conn.execute("SELECT COUNT(*) as c FROM users") as cur:
+            users_count = (await cur.fetchone())["c"]
+        async with self.conn.execute("SELECT COUNT(*) as c FROM sticker_packs WHERE is_deleted = 0") as cur:
+            packs_count = (await cur.fetchone())["c"]
+        async with self.conn.execute("SELECT COUNT(*) as c FROM stickers") as cur:
+            stickers_count = (await cur.fetchone())["c"]
+
+        return {
+            "users_count": users_count,
+            "packs_count": packs_count,
+            "stickers_count": stickers_count,
+        }
+
+    async def get_all_packs(self, limit: int = 50, offset: int = 0) -> list[dict]:
+        query = """
+        SELECT p.*, u.username as owner_username, u.first_name as owner_name
+        FROM sticker_packs p
+        LEFT JOIN users u ON p.user_id = u.telegram_id
+        WHERE p.is_deleted = 0
+        ORDER BY p.id DESC
+        LIMIT ? OFFSET ?
+        """
+        async with self.conn.execute(query, (limit, offset)) as cur:
+            rows = await cur.fetchall()
+            return [
+                {
+                    "pack": StickerPack(
+                        id=r["id"],
+                        user_id=r["user_id"],
+                        name=r["name"],
+                        title=r["title"],
+                        sticker_type=r["sticker_type"],
+                        format=r["format"],
+                        stickers_count=r["stickers_count"],
+                        is_deleted=bool(r["is_deleted"]),
+                        created_at=str(r["created_at"])
+                    ),
+                    "owner_username": r["owner_username"],
+                    "owner_name": r["owner_name"],
+                }
+                for r in rows
+            ]
+
+    async def get_all_users(self, limit: int = 50, offset: int = 0) -> list[dict]:
+        query = """
+        SELECT u.*, COUNT(p.id) as packs_count
+        FROM users u
+        LEFT JOIN sticker_packs p ON u.telegram_id = p.user_id AND p.is_deleted = 0
+        GROUP BY u.telegram_id
+        ORDER BY u.created_at DESC
+        LIMIT ? OFFSET ?
+        """
+        async with self.conn.execute(query, (limit, offset)) as cur:
+            rows = await cur.fetchall()
+            return [
+                {
+                    "user": User(
+                        telegram_id=r["telegram_id"],
+                        username=r["username"],
+                        first_name=r["first_name"],
+                        active_pack_id=r["active_pack_id"],
+                        settings_quick_mode=bool(r["settings_quick_mode"]),
+                        settings_auto_outline=bool(r["settings_auto_outline"]),
+                        settings_default_emoji=r["settings_default_emoji"],
+                        created_at=str(r["created_at"]),
+                        updated_at=str(r["updated_at"])
+                    ),
+                    "packs_count": r["packs_count"]
+                }
+                for r in rows
+            ]
