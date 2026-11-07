@@ -105,3 +105,37 @@ async def test_admin_repository_methods():
         assert len(all_users) == 2
 
         await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_sticker_lookup_and_update_methods():
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db_path = Path(tmp_dir) / "test_stk.db"
+        db = Database(db_path)
+        await db.init()
+
+        conn = await db.get_connection()
+        repo = Repository(conn)
+
+        user = await repo.get_or_create_user(2001, "stk_user", "Stk")
+        pack = await repo.create_pack(2001, "stk_pack_by_test", "Sticker Test")
+
+        stk = await repo.add_sticker(pack.id, "fid_999", "uid_999", "🐱")
+
+        # Test lookup by file_id
+        found = await repo.get_sticker_by_file_id("fid_999")
+        assert found is not None
+        assert found.file_id == "fid_999"
+        assert found.emoji == "🐱"
+
+        # Test lookup by unique_id
+        found_uid = await repo.get_sticker_by_unique_id("uid_999")
+        assert found_uid is not None
+        assert found_uid.id == stk.id
+
+        # Test update emoji
+        await repo.update_sticker_emoji(stk.id, "🔥")
+        updated = await repo.get_sticker_by_file_id("fid_999")
+        assert updated.emoji == "🔥"
+
+        await conn.close()

@@ -5,6 +5,7 @@ from bot.handlers.pack_import import router as pack_import_router
 from bot.handlers.sticker_upload import router as sticker_upload_router
 from bot.handlers.settings import router as settings_router
 from bot.handlers.admin import router as admin_router
+from bot.handlers.sticker_actions import router as sticker_actions_router
 
 routers = [
     common_router,
@@ -12,6 +13,7 @@ routers = [
     pack_creation_router,
     pack_management_router,
     pack_import_router,
+    sticker_actions_router,  # Granular sticker actions
     settings_router,
     sticker_upload_router,  # Put sticker_upload last so it catches general media
 ]

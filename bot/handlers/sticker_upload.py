@@ -91,7 +91,6 @@ async def get_or_resolve_active_pack(
 @router.message(F.document)
 @router.message(F.video)
 @router.message(F.animation)
-@router.message(F.sticker)
 async def handle_media_upload(
     message: Message,
     bot: Bot,

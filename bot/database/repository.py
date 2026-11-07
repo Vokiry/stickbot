@@ -384,3 +384,44 @@ class Repository:
                 }
                 for r in rows
             ]
+
+    async def get_sticker_by_file_id(self, file_id: str) -> Optional[StickerItem]:
+        async with self.conn.execute(
+            "SELECT * FROM stickers WHERE file_id = ? LIMIT 1",
+            (file_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return StickerItem(
+                id=row["id"],
+                pack_id=row["pack_id"],
+                file_id=row["file_id"],
+                file_unique_id=row["file_unique_id"],
+                emoji=row["emoji"],
+                created_at=str(row["created_at"])
+            )
+
+    async def get_sticker_by_unique_id(self, file_unique_id: str) -> Optional[StickerItem]:
+        async with self.conn.execute(
+            "SELECT * FROM stickers WHERE file_unique_id = ? LIMIT 1",
+            (file_unique_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return StickerItem(
+                id=row["id"],
+                pack_id=row["pack_id"],
+                file_id=row["file_id"],
+                file_unique_id=row["file_unique_id"],
+                emoji=row["emoji"],
+                created_at=str(row["created_at"])
+            )
+
+    async def update_sticker_emoji(self, sticker_id: int, new_emoji: str) -> None:
+        await self.conn.execute(
+            "UPDATE stickers SET emoji = ? WHERE id = ?",
+            (new_emoji, sticker_id)
+        )
+        await self.conn.commit()

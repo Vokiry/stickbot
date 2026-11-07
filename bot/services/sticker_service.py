@@ -147,3 +147,19 @@ class StickerService:
         except TelegramBadRequest as e:
             logger.warning("Could not fetch sticker set %s: %s", name, e.message)
             return None
+
+    async def change_sticker_emoji(self, file_id: str, emojis: list[str]) -> bool:
+        try:
+            await self.bot.set_sticker_emoji_list(sticker=file_id, emoji_list=emojis)
+            return True
+        except TelegramBadRequest as e:
+            logger.error("Failed to change emoji for sticker %s: %s", file_id, e.message)
+            return False
+
+    async def set_sticker_position(self, file_id: str, position: int = 0) -> bool:
+        try:
+            await self.bot.set_sticker_position_in_set(sticker=file_id, position=position)
+            return True
+        except TelegramBadRequest as e:
+            logger.error("Failed to set position for sticker %s: %s", file_id, e.message)
+            return False
