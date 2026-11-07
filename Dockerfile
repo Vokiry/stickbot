@@ -23,5 +23,6 @@ RUN mkdir -p /app/data /tmp/stickbot
 ENV PYTHONPATH=/app
 ENV DB_PATH=/app/data/bot.db
 ENV TEMP_DIR=/tmp/stickbot
+ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "-m", "bot.main"]
+CMD ["python", "-u", "-m", "bot.main"]
