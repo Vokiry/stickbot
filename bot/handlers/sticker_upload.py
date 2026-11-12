@@ -1,23 +1,30 @@
 import html
 import io
 import logging
+import time
 import uuid
 from typing import Optional
 
 from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    BufferedInputFile
+)
 from aiogram.exceptions import TelegramBadRequest
 
 from bot.config import settings
 from bot.database.models import User, StickerPack
 from bot.database.repository import Repository
 from bot.services.sticker_service import StickerService
-from bot.services.image_processor import process_image, add_text_captions
+from bot.services.image_processor import process_image
 from bot.services.video_processor import process_video
 from bot.utils.helpers import extract_emojis, format_pack_link
 from bot.utils.keyboards import get_sticker_added_keyboard, get_interactive_preview_keyboard
-
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +33,10 @@ router = Router(name="sticker_upload")
 # In-memory storage for interactive previews with automatic TTL cleanup
 PREVIEW_CACHE: dict[str, dict] = {}
 MAX_FILE_SIZE = 25 * 1024 * 1024  # 25 MB
+
+
+class PreviewChangeEmojiSG(StatesGroup):
+    waiting_for_emoji = State()
 
 
 def cleanup_preview_cache():
@@ -41,11 +52,10 @@ def cleanup_preview_cache():
 async def get_or_resolve_active_pack(
     message: Message,
     repo: Repository,
-    user: User,
-    media_format: str
+    user: User
 ) -> Optional[StickerPack]:
     """
-    Finds current active pack or automatically selects matching pack for the media format.
+    Finds current active pack or automatically selects an existing pack for the user.
     """
     if user.active_pack_id:
         active_pack = await repo.get_pack(user.active_pack_id)
@@ -83,16 +93,9 @@ async def handle_media_upload(
 ):
     # 1. Determine media format and file_id
     is_video = False
-    is_sticker = False
-    sticker_emoji = None
     file_id = None
 
-    if message.sticker:
-        is_sticker = True
-        sticker_emoji = message.sticker.emoji
-        is_video = message.sticker.is_video
-        file_id = message.sticker.file_id
-    elif message.video or message.animation:
+    if message.video or message.animation:
         is_video = True
         file_id = message.video.file_id if message.video else message.animation.file_id
     elif message.document:
@@ -114,7 +117,7 @@ async def handle_media_upload(
     media_format = "video" if is_video else "static"
 
     # 2. Resolve active pack
-    pack = await get_or_resolve_active_pack(message, repo, user, media_format)
+    pack = await get_or_resolve_active_pack(message, repo, user)
     if not pack:
         return
 
@@ -138,24 +141,21 @@ async def handle_media_upload(
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🎨 Создать Часть 2", callback_data="create_new_pack")]
         ])
+        title_esc = html.escape(pack.title)
         await message.answer(
-            f"⚠️ Стикерпак «**{pack.title}**» полностью заполнен ({pack.stickers_count}/{limit} стикеров)!\n"
+            f"⚠️ Стикерпак «<b>{title_esc}</b>» полностью заполнен ({pack.stickers_count}/{limit} стикеров)!\n"
             f"Создайте следующий пак для продолжения коллекции.",
             reply_markup=keyboard,
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
         return
 
     # 3. Extract emoji
-    if sticker_emoji:
-        emojis = [sticker_emoji]
-    else:
-        emojis = extract_emojis(message.caption, default=user.settings_default_emoji)
-
+    emojis = extract_emojis(message.caption, default=user.settings_default_emoji)
     is_custom_emoji = (pack.sticker_type == "custom_emoji")
 
-    # If Quick Mode is ON or it's a direct sticker forward: process and add immediately
-    if user.settings_quick_mode or is_sticker or is_video:
+    # If Quick Mode is ON: process and add immediately
+    if user.settings_quick_mode:
         status_msg = await message.answer("⏳ Обрабатываю и добавляю в стикерпак...")
 
         try:
@@ -181,7 +181,7 @@ async def handle_media_upload(
                     is_custom_emoji=is_custom_emoji
                 )
 
-            # Add to set in Telegram with the actual media_format
+            # Add to set in Telegram with the actual media_format ('static' or 'video')
             sticker_service = StickerService(bot)
             await sticker_service.add_sticker(
                 user_id=message.from_user.id,
@@ -204,16 +204,22 @@ async def handle_media_upload(
                 emoji=emojis[0]
             )
 
-            pack_link = format_pack_link(pack.name)
             await status_msg.delete()
-            source_set = message.sticker.set_name if message.sticker else None
+
+            # Send sticker message to force client cache invalidation
+            try:
+                await bot.send_sticker(chat_id=message.chat.id, sticker=last_file_id)
+            except Exception as e:
+                logger.warning("Could not send added sticker: %s", e)
+
+            pack_link = format_pack_link(pack.name)
             title_esc = html.escape(pack.title)
             await message.answer(
                 f"✅ <b>Стикер успешно добавлен!</b>\n\n"
                 f"📦 Пак: <b>{title_esc}</b> ({pack.stickers_count + 1}/{limit})\n"
                 f"🎯 Эмодзи: {' '.join(emojis)}\n"
                 f"🔗 {pack_link}",
-                reply_markup=get_sticker_added_keyboard(pack, last_file_id, source_set_name=source_set),
+                reply_markup=get_sticker_added_keyboard(pack, last_file_id),
                 parse_mode="HTML"
             )
 
@@ -225,7 +231,7 @@ async def handle_media_upload(
             await status_msg.edit_text(f"❌ Не удалось добавить стикер: {e}")
 
     else:
-        # Interactive Mode: generate preview and show options
+        # Interactive Mode: generate preview and show options for BOTH images and videos
         file_info = await bot.get_file(file_id)
         if file_info.file_size and file_info.file_size > MAX_FILE_SIZE:
             await message.answer("⚠️ Файл слишком большой (максимум 25 МБ). Пожалуйста, отправьте файл меньшего размера.")
@@ -237,44 +243,119 @@ async def handle_media_upload(
 
         cleanup_preview_cache()
         temp_id = str(uuid.uuid4())[:8]
-        PREVIEW_CACHE[temp_id] = {
-            "raw_bytes": raw_bytes,
-            "pack_id": pack.id,
-            "format": pack.format,
-            "is_custom_emoji": is_custom_emoji,
-            "outline": user.settings_auto_outline,
-            "emoji": emojis[0],
-            "top_text": "",
-            "bottom_text": "",
-            "created_at": time.time()
-        }
 
-        # Render preview image
-        preview_bytes = process_image(
-            raw_bytes,
-            add_outline=user.settings_auto_outline,
-            is_custom_emoji=is_custom_emoji
-        )
+        title_esc = html.escape(pack.title)
 
-        from aiogram.types import BufferedInputFile
-        photo_file = BufferedInputFile(preview_bytes, filename="preview.webp")
+        if is_video:
+            status_msg = await message.answer("⏳ Готовлю предпросмотр видеостикера...")
+            preview_bytes = await process_video(
+                raw_bytes,
+                temp_dir=settings.TEMP_DIR,
+                is_custom_emoji=is_custom_emoji
+            )
+            await status_msg.delete()
 
-        await message.answer_photo(
-            photo_file,
-            caption=(
-                f"🎨 **Предпросмотр стикера**\n\n"
-                f"Пак: **{pack.title}**\n"
-                f"Эмодзи: {emojis[0]}\n\n"
-                f"Настройте параметры или подтвердите добавление:"
-            ),
-            reply_markup=get_interactive_preview_keyboard(
-                pack.id,
-                temp_id,
-                user.settings_auto_outline,
-                emojis[0]
-            ),
-            parse_mode="Markdown"
-        )
+            PREVIEW_CACHE[temp_id] = {
+                "raw_bytes": raw_bytes,
+                "processed_bytes": preview_bytes,
+                "pack_id": pack.id,
+                "format": "video",
+                "is_custom_emoji": is_custom_emoji,
+                "outline": False,
+                "emoji": emojis[0],
+                "top_text": "",
+                "bottom_text": "",
+                "created_at": time.time()
+            }
+
+            video_file = BufferedInputFile(preview_bytes, filename="preview.webm")
+            await message.answer_video(
+                video_file,
+                caption=(
+                    f"🎨 <b>Предпросмотр видеостикера</b>\n\n"
+                    f"Пак: <b>{title_esc}</b>\n"
+                    f"Эмодзи: {emojis[0]}\n\n"
+                    f"Подтвердите добавление в пак:"
+                ),
+                reply_markup=get_interactive_preview_keyboard(
+                    pack.id,
+                    temp_id,
+                    outline_enabled=False,
+                    emoji=emojis[0],
+                    is_video=True
+                ),
+                parse_mode="HTML"
+            )
+        else:
+            preview_bytes = process_image(
+                raw_bytes,
+                add_outline=user.settings_auto_outline,
+                is_custom_emoji=is_custom_emoji
+            )
+
+            PREVIEW_CACHE[temp_id] = {
+                "raw_bytes": raw_bytes,
+                "processed_bytes": preview_bytes,
+                "pack_id": pack.id,
+                "format": "static",
+                "is_custom_emoji": is_custom_emoji,
+                "outline": user.settings_auto_outline,
+                "emoji": emojis[0],
+                "top_text": "",
+                "bottom_text": "",
+                "created_at": time.time()
+            }
+
+            photo_file = BufferedInputFile(preview_bytes, filename="preview.webp")
+            await message.answer_photo(
+                photo_file,
+                caption=(
+                    f"🎨 <b>Предпросмотр стикера</b>\n\n"
+                    f"Пак: <b>{title_esc}</b>\n"
+                    f"Эмодзи: {emojis[0]}\n\n"
+                    f"Настройте параметры или подтвердите добавление:"
+                ),
+                reply_markup=get_interactive_preview_keyboard(
+                    pack.id,
+                    temp_id,
+                    user.settings_auto_outline,
+                    emojis[0],
+                    is_video=False
+                ),
+                parse_mode="HTML"
+            )
+
+
+@router.callback_query(F.data.startswith("preview_change_emoji:"))
+async def callback_preview_change_emoji(callback: CallbackQuery, state: FSMContext):
+    temp_id = callback.data.split(":")[1]
+    if temp_id not in PREVIEW_CACHE:
+        await callback.answer("Сессия устарела.", show_alert=True)
+        return
+
+    await state.update_data(preview_temp_id=temp_id)
+    await state.set_state(PreviewChangeEmojiSG.waiting_for_emoji)
+    await callback.message.answer(
+        "🎯 Отправьте **новый эмодзи** для этого стикера (например: 🔥 или 😎):",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+@router.message(PreviewChangeEmojiSG.waiting_for_emoji, F.text)
+async def process_preview_new_emoji(message: Message, state: FSMContext):
+    emojis = extract_emojis(message.text)
+    new_emoji = emojis[0] if emojis else "✨"
+    data = await state.get_data()
+    temp_id = data.get("preview_temp_id")
+
+    if temp_id and temp_id in PREVIEW_CACHE:
+        PREVIEW_CACHE[temp_id]["emoji"] = new_emoji
+
+    await state.clear()
+    await message.answer(
+        f"✅ Выбран эмодзи: {new_emoji}. Нажмите кнопку «✅ Добавить в пак» под предпросмотром выше."
+    )
 
 
 @router.callback_query(F.data.startswith("preview_toggle_outline:"))
@@ -283,6 +364,10 @@ async def callback_preview_toggle_outline(callback: CallbackQuery):
     item = PREVIEW_CACHE.get(temp_id)
     if not item:
         await callback.answer("Сессия предпросмотра устарела.", show_alert=True)
+        return
+
+    if item.get("format") == "video":
+        await callback.answer("Обводка поддерживается только для статичных картинок.", show_alert=True)
         return
 
     item["outline"] = not item["outline"]
@@ -294,8 +379,9 @@ async def callback_preview_toggle_outline(callback: CallbackQuery):
         top_text=item["top_text"],
         bottom_text=item["bottom_text"]
     )
+    item["processed_bytes"] = preview_bytes
 
-    from aiogram.types import InputMediaPhoto, BufferedInputFile
+    from aiogram.types import InputMediaPhoto
     media = InputMediaPhoto(
         media=BufferedInputFile(preview_bytes, filename="preview.webp"),
         caption=callback.message.caption
@@ -306,7 +392,8 @@ async def callback_preview_toggle_outline(callback: CallbackQuery):
             item["pack_id"],
             temp_id,
             item["outline"],
-            item["emoji"]
+            item["emoji"],
+            is_video=False
         )
     )
     await callback.answer()
@@ -328,20 +415,31 @@ async def callback_preview_confirm_add(callback: CallbackQuery, bot: Bot, repo: 
     await callback.message.edit_caption(caption="⏳ Добавляю стикер в пак...")
 
     try:
-        processed_bytes = process_image(
-            item["raw_bytes"],
-            add_outline=item["outline"],
-            is_custom_emoji=item["is_custom_emoji"],
-            top_text=item["top_text"],
-            bottom_text=item["bottom_text"]
-        )
+        media_fmt = item.get("format", "static")
+        processed_bytes = item.get("processed_bytes")
+
+        if not processed_bytes:
+            if media_fmt == "video":
+                processed_bytes = await process_video(
+                    item["raw_bytes"],
+                    temp_dir=settings.TEMP_DIR,
+                    is_custom_emoji=item["is_custom_emoji"]
+                )
+            else:
+                processed_bytes = process_image(
+                    item["raw_bytes"],
+                    add_outline=item["outline"],
+                    is_custom_emoji=item["is_custom_emoji"],
+                    top_text=item["top_text"],
+                    bottom_text=item["bottom_text"]
+                )
 
         sticker_service = StickerService(bot)
         await sticker_service.add_sticker(
             user_id=callback.from_user.id,
             name=pack.name,
             sticker_data=processed_bytes,
-            format_=pack.format,
+            format_=media_fmt,  # Strictly 'static' or 'video'
             emojis=[item["emoji"]]
         )
 
@@ -355,6 +453,12 @@ async def callback_preview_confirm_add(callback: CallbackQuery, bot: Bot, repo: 
             file_unique_id=last_unique_id,
             emoji=item["emoji"]
         )
+
+        # Send sticker message to force client cache invalidation
+        try:
+            await bot.send_sticker(chat_id=callback.message.chat.id, sticker=last_file_id)
+        except Exception as e:
+            logger.warning("Could not send added sticker preview: %s", e)
 
         pack_link = format_pack_link(pack.name)
         title_esc = html.escape(pack.title)
@@ -379,26 +483,3 @@ async def callback_preview_cancel(callback: CallbackQuery):
     PREVIEW_CACHE.pop(temp_id, None)
     await callback.message.delete()
     await callback.answer("Отменено.")
-
-
-@router.callback_query(F.data.startswith("del_sticker_fid:"))
-async def callback_delete_sticker_by_fid(callback: CallbackQuery, bot: Bot, repo: Repository):
-    parts = callback.data.split(":")
-    pack_id = int(parts[1])
-    file_id = parts[2]
-
-    pack = await repo.get_pack(pack_id)
-    if not pack or pack.user_id != callback.from_user.id:
-        await callback.answer("⛔️ У вас нет прав для изменения этого набора.", show_alert=True)
-        return
-
-    sticker_service = StickerService(bot)
-    success = await sticker_service.delete_sticker(file_id)
-    if success:
-        last_sticker = await repo.get_last_sticker(pack_id)
-        if last_sticker:
-            await repo.delete_sticker(last_sticker.id, pack_id)
-        await callback.message.edit_reply_markup(reply_markup=None)
-        await callback.answer("🗑 Стикер успешно удален из набора!", show_alert=True)
-    else:
-        await callback.answer("❌ Не удалось удалить стикер.", show_alert=True)

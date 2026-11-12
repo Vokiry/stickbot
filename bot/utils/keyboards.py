@@ -179,8 +179,22 @@ def get_interactive_preview_keyboard(
     pack_id: int,
     temp_id: str,
     outline_enabled: bool,
-    emoji: str
+    emoji: str,
+    is_video: bool = False
 ) -> InlineKeyboardMarkup:
+    if is_video:
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text=f"🎯 Эмодзи: {emoji}", callback_data=f"preview_change_emoji:{temp_id}")
+                ],
+                [
+                    InlineKeyboardButton(text="✅ Добавить в пак", callback_data=f"preview_confirm_add:{temp_id}"),
+                    InlineKeyboardButton(text="❌ Отмена", callback_data=f"preview_cancel:{temp_id}")
+                ]
+            ]
+        )
+
     outline_text = "✨ Обводка: ВКЛ" if outline_enabled else "⚪️ Обводка: ВЫКЛ"
 
     return InlineKeyboardMarkup(

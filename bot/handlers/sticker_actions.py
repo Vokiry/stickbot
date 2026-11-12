@@ -400,7 +400,7 @@ async def callback_stk_add_active(callback: CallbackQuery, bot: Bot, repo: Repos
         await callback.answer("Активный пак не найден или нет прав.", show_alert=True)
         return
 
-    await do_add_sticker_to_pack(callback, bot, repo, pack, sess["file_id"], sess["emoji"])
+    await do_add_sticker_to_pack(callback, bot, repo, pack, sess["file_id"], sess["emoji"], sess.get("format", "static"))
 
 
 @router.callback_query(F.data.startswith("stk_add_to:"))
@@ -419,7 +419,7 @@ async def callback_stk_add_to_specific(callback: CallbackQuery, bot: Bot, repo: 
         await callback.answer("Пак не найден или нет прав.", show_alert=True)
         return
 
-    await do_add_sticker_to_pack(callback, bot, repo, pack, sess["file_id"], sess["emoji"])
+    await do_add_sticker_to_pack(callback, bot, repo, pack, sess["file_id"], sess["emoji"], sess.get("format", "static"))
 
 
 async def do_add_sticker_to_pack(
@@ -428,15 +428,17 @@ async def do_add_sticker_to_pack(
     repo: Repository,
     pack: StickerPack,
     file_id: str,
-    emoji: str
+    emoji: str,
+    media_format: str = "static"
 ):
     sticker_service = StickerService(bot)
     try:
+        valid_fmt = "video" if media_format == "video" else "static"
         await sticker_service.add_sticker(
             user_id=callback.from_user.id,
             name=pack.name,
             sticker_data=file_id,
-            format_=pack.format,
+            format_=valid_fmt,
             emojis=[emoji]
         )
 
@@ -445,6 +447,12 @@ async def do_add_sticker_to_pack(
         new_uid = set_info.stickers[-1].file_unique_id if set_info and set_info.stickers else "uid"
 
         await repo.add_sticker(pack.id, new_fid, new_uid, emoji)
+
+        # Send sticker message to force client cache invalidation
+        try:
+            await bot.send_sticker(chat_id=callback.message.chat.id, sticker=new_fid)
+        except Exception as e:
+            logger.warning("Could not send added sticker preview: %s", e)
 
         title_esc = html.escape(pack.title)
         pack_url = format_pack_link(pack.name)

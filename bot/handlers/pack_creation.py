@@ -1,3 +1,4 @@
+import html
 import io
 import logging
 from aiogram import Router, F, Bot
@@ -292,16 +293,24 @@ async def process_first_sticker(
 
         await state.clear()
         pack_link = format_pack_link(pack_name)
-
         await status_msg.delete()
+
+        # Send sticker message to force client cache invalidation
+        if set_info and set_info.stickers:
+            try:
+                await bot.send_sticker(chat_id=message.chat.id, sticker=set_info.stickers[0].file_id)
+            except Exception as e:
+                logger.warning("Could not send first sticker preview: %s", e)
+
+        title_esc = html.escape(title)
         await message.answer(
-            f"🎉 **Стикерпак успешно создан!**\n\n"
-            f"📌 **Название:** {title}\n"
-            f"🔗 **Ссылка:** {pack_link}\n\n"
-            f"Этот пак установлен как **активный**. Теперь вы можете просто присылать боту любые изображения или видео, "
+            f"🎉 <b>Стикерпак успешно создан!</b>\n\n"
+            f"📌 <b>Название:</b> {title_esc}\n"
+            f"🔗 <b>Ссылка:</b> {pack_link}\n\n"
+            f"Этот пак установлен как <b>активный</b>. Теперь вы можете просто присылать боту любые изображения или видео, "
             f"и они будут сразу добавляться в этот набор!",
             reply_markup=get_pack_details_keyboard(pack, is_active=True),
-            parse_mode="Markdown"
+            parse_mode="HTML"
         )
 
     except TelegramBadRequest as e:

@@ -28,15 +28,23 @@ class StickerService:
         if not emojis:
             emojis = ["✨"]
 
+        # Normalize format_ to strictly valid Telegram values: static, video, animated
+        valid_format = format_
+        if valid_format not in ("static", "video", "animated"):
+            if isinstance(sticker_data, bytes) and sticker_data.startswith(b"\x1a\x45\xdf\xa3"):
+                valid_format = "video"
+            else:
+                valid_format = "static"
+
         if isinstance(sticker_data, bytes):
-            ext = "webm" if format_ == "video" else "webp"
+            ext = "webm" if valid_format == "video" else "webp"
             sticker_file = BufferedInputFile(sticker_data, filename=f"sticker.{ext}")
         else:
             sticker_file = sticker_data
 
         input_sticker = InputSticker(
             sticker=sticker_file,
-            format=format_,
+            format=valid_format,
             emoji_list=emojis
         )
 
@@ -72,15 +80,23 @@ class StickerService:
         if not emojis:
             emojis = ["✨"]
 
+        # Normalize format_ to strictly valid Telegram values: static, video, animated
+        valid_format = format_
+        if valid_format not in ("static", "video", "animated"):
+            if isinstance(sticker_data, bytes) and sticker_data.startswith(b"\x1a\x45\xdf\xa3"):
+                valid_format = "video"
+            else:
+                valid_format = "static"
+
         if isinstance(sticker_data, bytes):
-            ext = "webm" if format_ == "video" else "webp"
+            ext = "webm" if valid_format == "video" else "webp"
             sticker_file = BufferedInputFile(sticker_data, filename=f"sticker.{ext}")
         else:
             sticker_file = sticker_data
 
         input_sticker = InputSticker(
             sticker=sticker_file,
-            format=format_,
+            format=valid_format,
             emoji_list=emojis
         )
 
